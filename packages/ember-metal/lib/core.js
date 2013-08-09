@@ -117,6 +117,16 @@ Ember.SHIM_ES5 = (Ember.ENV.SHIM_ES5 === false) ? false : Ember.EXTEND_PROTOTYPE
 */
 Ember.LOG_VERSION = (Ember.ENV.LOG_VERSION === false) ? false : true;
 
+
+/**
+  Determines whether Ember should use console.assert, which is very slow in Chrome
+  @property CONSOLE_ASSERT
+  @type Boolean
+  @default false
+*/
+Ember.CONSOLE_ASSERT = !!Ember.ENV.CONSOLE_ASSERT;
+
+
 /**
   Empty function. Useful for some operations.
 
@@ -196,7 +206,7 @@ Ember.Logger = {
   error: consoleMethod('error') || Ember.K,
   info:  consoleMethod('info')  || Ember.K,
   debug: consoleMethod('debug') || consoleMethod('info') || Ember.K,
-  assert: consoleMethod('assert') || assertPolyfill
+  assert: (Ember.CONSOLE_ASSERT ? consoleMethod('assert') || assertPolyfill : assertPolyfill)
 };
 
 
