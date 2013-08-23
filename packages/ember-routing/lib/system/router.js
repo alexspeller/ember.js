@@ -214,11 +214,12 @@ Ember.Router = Ember.Object.extend({
     args = [].slice.call(args);
     args[0] = args[0] || '/';
 
-    var passedName = args[0], name, self = this;
+    var passedName = args[0], name, self = this,
+      isQueryParamsOnly = (args.length === 1 && args[0].queryParams);
 
-    if (passedName.charAt(0) === '/') {
+    if (!isQueryParamsOnly && passedName.charAt(0) === '/') {
       name = passedName;
-    } else {
+    } else if (!isQueryParamsOnly) {
       if (!this.router.hasRoute(passedName)) {
         name = args[0] = passedName + '.index';
       } else {

@@ -109,7 +109,7 @@ define("router",
       retry: function() {
         this.abort();
         var recogHandlers = this.router.recognizer.handlersFor(this.targetName),
-            handlerInfos  = generateHandlerInfosWithQueryParams(recogHandlers, this.queryParams),
+            handlerInfos  = generateHandlerInfosWithQueryParams(this.router, recogHandlers, this.queryParams),
             newTransition = performTransition(this.router, handlerInfos, this.providedModelsArray, this.params, this.queryParams, this.data);
 
         return newTransition;
@@ -299,26 +299,28 @@ define("router",
           suppliedParams = partitionedArgs[0],
           queryParams = partitionedArgs[1];
 
-        var params = paramsForHandler(this, handlerName, suppliedParams, queryParams);
+        var params = paramsForHandler(this, handlerName, suppliedParams, queryParams),
+          validQueryParams = queryParamsForHandler(this, handlerName);
 
-        if (!queryParamsEqual(queryParams, params.queryParams)) {
-          var missingParams = [];
+        var missingParams = [];
 
-          for (var key in queryParams) {
-            if (!params.queryParams.hasOwnProperty(key)) {
-              missingParams.push(key);
-            }
-          }
-          if (missingParams.length > 0) {
-            var err = 'You supplied the params ';
-            err += missingParams.map(function(param) {
-              return key + "=" + queryParams[key];
-            }).join(' and ');
-
-            err += 'which are not valid for the "' + handlerName + '" handler or its parents';
-            throw err;
+        for (var key in queryParams) {
+          if (queryParams.hasOwnProperty(key) && !~validQueryParams.indexOf(key)) {
+            missingParams.push(key);
           }
         }
+
+        if (missingParams.length > 0) {
+          var err = 'You supplied the params ';
+          err += missingParams.map(function(param) {
+            return '"' + param + "=" + queryParams[param] + '"';
+          }).join(' and ');
+
+          err += ' which are not valid for the "' + handlerName + '" handler or its parents';
+
+          throw new Error(err);
+        }
+
         return this.recognizer.generate(handlerName, params);
       },
 
@@ -433,23 +435,7 @@ define("router",
         // If there is an old handler, see if query params are the same. If there isn't an old handler,
         // hasChanged will already be true here
         if(oldHandlerInfo && !queryParamsEqual(oldHandlerInfo.queryParams, handlerObj.queryParams)) {
-          var newQueryParams = {};
-
-          // Query params are sticky, so merge together old and new for comparison
-          if(oldHandlerInfo.queryParams) {
-            merge(newQueryParams, oldHandlerInfo.queryParams);
-            merge(newQueryParams, handlerObj.queryParams);
-          } else {
-            newQueryParams = handlerObj.queryParams;
-          }
-
-          // if the old and new after merging aren't the same, then the query params
-          // really have changed.
-          if (!queryParamsEqual(oldHandlerInfo.queryParams, newQueryParams)) {
             hasChanged = true;
-            handlerObj.queryParams = newQueryParams;
-          }
-
         }
 
         if (hasChanged) { matchPoint = i; }
@@ -485,6 +471,28 @@ define("router",
       return (typeof object === "string" || object instanceof String || !isNaN(object));
     }
 
+
+
+    /**
+      @private
+
+      This method takes a handler name and returns a list of query params
+      that are valid to pass to the handler or its parents
+
+      @param {Router} router
+      @param {String} handlerName
+      @return {Array[String]} a list of query parameters
+    */
+    function queryParamsForHandler(router, handlerName) {
+      var handlers = router.recognizer.handlersFor(handlerName),
+        queryParams = [];
+
+      for (var i = 0; i < handlers.length; i++) {
+        queryParams.push.apply(queryParams, handlers[i].queryParams || []);
+      }
+
+      return queryParams;
+    }
     /**
       @private
 
@@ -500,7 +508,7 @@ define("router",
 
       var handlers = router.recognizer.handlersFor(handlerName),
           params = {},
-          handlerInfos = generateHandlerInfosWithQueryParams(handlers, queryParams),
+          handlerInfos = generateHandlerInfosWithQueryParams(router, handlers, queryParams),
           matchPoint = getMatchPoint(router, handlerInfos, objects).matchPoint,
           mergedQueryParams = {},
           object, handlerObj, handler, names, i;
@@ -541,11 +549,11 @@ define("router",
     }
 
     function mergeSomeKeys(hash, other, keys) {
-      if (!other || !keys) { return }
+      if (!other || !keys) { return; }
       for(var i = 0; i < keys.length; i++) {
         var key = keys[i], value;
         if(other.hasOwnProperty(key)) {
-          var value = other[key];
+          value = other[key];
           if(value === null || value === false || typeof value === "undefined") {
             delete hash[key];
           } else {
@@ -559,23 +567,22 @@ define("router",
       @private
     */
 
-    function generateHandlerInfosWithQueryParams(handlers, queryParams) {
+    function generateHandlerInfosWithQueryParams(router, handlers, queryParams) {
       var handlerInfos = [];
 
       for (var i = 0; i < handlers.length; i++) {
         var handler = handlers[i],
           handlerInfo = { handler: handler.handler, names: handler.names, context: handler.context, isDynamic: handler.isDynamic },
           activeQueryParams = {};
-        if (queryParams && handler.queryParams) {
-          for (var j=0; j < handler.queryParams.length; j++) {
-            var queryParam = handler.queryParams[j], value;
 
-            if (value = queryParams[queryParam]) {
-              activeQueryParams[queryParam] = value;
-            }
-          }
+
+        mergeSomeKeys(activeQueryParams, router.currentQueryParams, handler.queryParams);
+        mergeSomeKeys(activeQueryParams, queryParams, handler.queryParams);
+
+        if (handler.queryParams && handler.queryParams.length > 0) {
           handlerInfo.queryParams = activeQueryParams;
         }
+
         handlerInfos.push(handlerInfo);
       }
 
@@ -585,17 +592,30 @@ define("router",
     /**
       @private
     */
+    function createQueryParamTransition(router, queryParams) {
+      var currentHandlers = router.currentHandlerInfos,
+          currentHandler = currentHandlers[currentHandlers.length - 1],
+          name = currentHandler.name;
+
+      log(router, "Attempting query param transition");
+
+      return createNamedTransition(router, [name, queryParams]);
+    }
+
+    /**
+      @private
+    */
     function createNamedTransition(router, args) {
       var partitionedArgs     = extractQueryParams(args),
-        args                  = partitionedArgs[0],
+        pureArgs              = partitionedArgs[0],
         queryParams           = partitionedArgs[1],
-        handlers              = router.recognizer.handlersFor(args[0]),
-        handlerInfos          = generateHandlerInfosWithQueryParams(handlers, queryParams);
+        handlers              = router.recognizer.handlersFor(pureArgs[0]),
+        handlerInfos          = generateHandlerInfosWithQueryParams(router, handlers, queryParams);
 
 
-      log(router, "Attempting transition to " + args[0]);
+      log(router, "Attempting transition to " + pureArgs[0]);
 
-      return performTransition(router, handlerInfos, slice.call(args, 1), router.currentParams, queryParams);
+      return performTransition(router, handlerInfos, slice.call(pureArgs, 1), router.currentParams, queryParams);
     }
 
     /**
@@ -615,7 +635,7 @@ define("router",
       for(var i = 0; i < results.length; i++) {
         merge(queryParams, results[i].queryParams);
       }
-      debugger
+
       return performTransition(router, results, [], {}, queryParams);
     }
 
@@ -741,13 +761,13 @@ define("router",
     function queryParamsEqual(a, b) {
       a = a || {};
       b = b || {};
-      var checkedKeys = [];
-      for(var key in a) {
+      var checkedKeys = [], key;
+      for(key in a) {
         if (!a.hasOwnProperty(key)) { continue; }
-        if(b[key] !== a[key]) { return false }
+        if(b[key] !== a[key]) { return false; }
         checkedKeys.push(key);
       }
-      for(var key in b) {
+      for(key in b) {
         if (!b.hasOwnProperty(key)) { continue; }
         if (~checkedKeys.indexOf(key)) { continue; }
         // b has a key not in a
@@ -1031,11 +1051,12 @@ define("router",
 
       var router = transition.router,
           seq = transition.sequence,
-          handlerName = handlerInfos[handlerInfos.length - 1].name;
+          handlerName = handlerInfos[handlerInfos.length - 1].name,
+          i;
 
       // Collect params for URL.
       var objects = [], providedModels = transition.providedModelsArray.slice();
-      for (var i = handlerInfos.length - 1; i>=0; --i) {
+      for (i = handlerInfos.length - 1; i>=0; --i) {
         var handlerInfo = handlerInfos[i];
         if (handlerInfo.isDynamic) {
           var providedModel = providedModels.pop();
@@ -1048,7 +1069,12 @@ define("router",
       transition.providedModelsArray = [];
       transition.providedContexts = {};
       router.currentParams = params;
-      router.currentQueryParams = transition.queryParams;
+
+      var newQueryParams = {};
+      for (i = handlerInfos.length - 1; i>=0; --i) {
+        merge(newQueryParams, handlerInfos[i].queryParams);
+      }
+      router.currentQueryParams = newQueryParams;
 
       var urlMethod = transition.urlMethod;
       if (urlMethod) {
@@ -1144,7 +1170,7 @@ define("router",
 
         log(router, seq, handlerName + ": calling beforeModel hook");
 
-        var p = handler.beforeModel && handler.beforeModel(transition);
+        var p = handler.beforeModel && handler.beforeModel(transition, handlerInfo.queryParams);
         return (p instanceof Transition) ? null : p;
       }
 
@@ -1164,7 +1190,7 @@ define("router",
 
         transition.resolvedModels[handlerInfo.name] = context;
 
-        var p = handler.afterModel && handler.afterModel(context, transition);
+        var p = handler.afterModel && handler.afterModel(context, transition, handlerInfo.queryParams);
         return (p instanceof Transition) ? null : p;
       }
 
@@ -1239,7 +1265,9 @@ define("router",
       // Normalize blank transitions to root URL transitions.
       var name = args[0] || '/';
 
-      if (name.charAt(0) === '/') {
+      if(args.length === 1 && args[0].queryParams) {
+        return createQueryParamTransition(router, args[0]);
+      } else if (name.charAt(0) === '/') {
         return createURLTransition(router, name);
       } else {
         return createNamedTransition(router, slice.call(args));

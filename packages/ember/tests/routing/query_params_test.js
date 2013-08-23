@@ -2,7 +2,6 @@ var Router, App, AppView, templates, router, container, originalTemplates;
 var get = Ember.get, set = Ember.set;
 
 function bootApplication() {
-  router = container.lookup('router:main');
   Ember.run(App, 'advanceReadiness');
 }
 
@@ -32,7 +31,10 @@ function handleURLAborts(path) {
   });
 }
 
-
+function shouldNotHappen(error) {
+  console.error(error.stack);
+  ok(false, "this .then handler should not be called: " + error.message);
+}
 
 function handleURLRejectsWith(path, expectedReason) {
   Ember.run(function() {
@@ -49,8 +51,7 @@ module("Routing with Query Params", {
     Ember.run(function() {
       App = Ember.Application.create({
         name: "App",
-        rootElement: '#qunit-fixture',
-        LOG_TRANSITIONS: true
+        rootElement: '#qunit-fixture'
       });
 
       App.deferReadiness();
@@ -72,6 +73,7 @@ module("Routing with Query Params", {
       Ember.TEMPLATES.homepage = compile("<h3>Megatroll</h3><p>{{home}}</p>");
       Ember.TEMPLATES.camelot = compile('<section><h3>Is a silly place</h3></section>');
     });
+    router = container.lookup('router:main');
   },
 
   teardown: function() {
@@ -85,641 +87,243 @@ module("Routing with Query Params", {
 });
 
 test("The Homepage with Query Params", function() {
-  expect(1);
+  expect(5);
 
   Router.map(function() {
     this.route("index", { path: "/", queryParams: ['foo', 'baz'] });
   });
 
   App.IndexRoute = Ember.Route.extend({
+    beforeModel: function(transition, queryParams) {
+      deepEqual(queryParams, {foo: 'bar', baz: true}, "beforeModel hook is called with query params");
+    },
+
     model: function(params, transition, queryParams) {
       deepEqual(queryParams, {foo: 'bar', baz: true}, "Model hook is called with query params");
+    },
+
+    afterModel: function(resolvedModel, transition, queryParams) {
+      deepEqual(queryParams, {foo: 'bar', baz: true}, "afterModel hook is called with query params");
+    },
+
+    setupController: function (controller, context, queryParams) {
+      deepEqual(queryParams, {foo: 'bar', baz: true}, "setupController hook is called with query params");
+    },
+
+    renderTemplate: function (controller, context, queryParams) {
+      deepEqual(queryParams, {foo: 'bar', baz: true}, "renderTemplates hook is called with query params");
+    }
+
+  });
+
+
+  router.location.setURL("/?foo=bar&baz");
+  bootApplication();
+});
+
+
+
+asyncTest("Transitioning query params works on the same route", function() {
+  expect(25);
+
+  var expectedQueryParams;
+
+  Router.map(function() {
+    this.route("home", { path: "/" });
+    this.resource("special", { path: "/specials/:menu_item_id", queryParams: ['view'] });
+  });
+
+  App.SpecialRoute = Ember.Route.extend({
+    beforeModel: function (transition, queryParams) {
+      deepEqual(queryParams, expectedQueryParams, "The query params are correct in the beforeModel hook");
+    },
+
+    model: function(params, transition, queryParams) {
+      deepEqual(queryParams, expectedQueryParams, "The query params are correct in the model hook");
+      return {id: params.menu_item_id};
+    },
+
+    afterModel: function (resolvedModel, transition, queryParams) {
+      deepEqual(queryParams, expectedQueryParams, "The query params are correct in the beforeModel hook");
+    },
+
+    setupController: function (controller, context, queryParams) {
+      deepEqual(queryParams, expectedQueryParams, "The query params are correct in the setupController hook");
+    },
+
+    renderTemplate: function (controller, context, queryParams) {
+      deepEqual(queryParams, expectedQueryParams, "The query params are correct in the renderTemplates hook");
+    },
+
+    serialize: function (obj) {
+      return {menu_item_id: obj.id};
     }
   });
 
 
-  container.lookup('router:main').location.setURL("/?foo=bar&baz")
+  Ember.TEMPLATES.home = Ember.Handlebars.compile(
+    "<h3>Home</h3>"
+  );
+
+
+  Ember.TEMPLATES.special = Ember.Handlebars.compile(
+    "<p>{{content.id}}</p>"
+  );
+
   bootApplication();
-  // stop();
-  // equal(Ember.$('h3:contains(Hours)', '#qunit-fixture').length, 1, "The home template was rendered");
+
+  var transition = handleURL('/');
+
+  Ember.run(function() {
+    transition.then(function() {
+      equal(Ember.$('h3', '#qunit-fixture').text(), "Home", "The app is now in the initial state");
+
+      expectedQueryParams = {};
+      return router.transitionTo('special', {id: 1});
+    }, shouldNotHappen).then(function(result) {
+      deepEqual(router.location.path, '/specials/1', "Correct URL after transitioning");
+
+      expectedQueryParams = {view: 'details'};
+      return router.transitionTo('special', {queryParams: {view: 'details'}});
+    }, shouldNotHappen).then(function (result) {
+      deepEqual(router.location.path, '/specials/1?view=details', "Correct URL after transitioning with route name and query params");
+
+      expectedQueryParams = {view: 'other'};
+      return router.transitionTo({queryParams: {view: 'other'}});
+    }, shouldNotHappen).then(function (result) {
+      deepEqual(router.location.path, '/specials/1?view=other', "Correct URL after transitioning with query params only");
+
+      expectedQueryParams = {view: 'three'};
+      return router.transitionTo("/specials/1?view=three");
+    }, shouldNotHappen).then(function (result) {
+      deepEqual(router.location.path, '/specials/1?view=three', "Correct URL after transitioning with url");
+
+      start();
+    }, shouldNotHappen);
+  });
 });
 
-// test("The Home page and the Camelot page with multiple Router.map calls", function() {
-//   Router.map(function() {
-//     this.route("home", { path: "/" });
-//   });
 
-//   Router.map(function() {
-//     this.route("camelot", {path: "/camelot"});
-//   });
+asyncTest("Transitioning query params works on a different route", function() {
+  expect(29);
 
-//   App.HomeRoute = Ember.Route.extend({
-//   });
+  var expectedQueryParams, expectedOtherQueryParams;
 
-//   App.CamelotRoute = Ember.Route.extend({
-//   });
+  Router.map(function() {
+    this.route("home", { path: "/" });
+    this.resource("special", { path: "/specials/:menu_item_id", queryParams: ['view'] });
+    this.resource("other", { path: "/others/:menu_item_id", queryParams: ['view', 'lang'] });
+  });
 
-//   var currentPath;
+  App.SpecialRoute = Ember.Route.extend({
+    beforeModel: function (transition, queryParams) {
+      deepEqual(queryParams, expectedQueryParams, "The query params are correct in the beforeModel hook");
+    },
 
-//   App.ApplicationController = Ember.Controller.extend({
-//     currentPathDidChange: Ember.observer(function() {
-//       currentPath = get(this, 'currentPath');
-//     }, 'currentPath')
-//   });
+    model: function(params, transition, queryParams) {
+      deepEqual(queryParams, expectedQueryParams, "The query params are correct in the model hook");
+      return {id: params.menu_item_id};
+    },
 
-//   App.CamelotController = Ember.Controller.extend({
-//     currentPathDidChange: Ember.observer(function() {
-//       currentPath = get(this, 'currentPath');
-//     }, 'currentPath')
-//   });
+    afterModel: function (resolvedModel, transition, queryParams) {
+      deepEqual(queryParams, expectedQueryParams, "The query params are correct in the beforeModel hook");
+    },
 
-//   bootApplication();
+    setupController: function (controller, context, queryParams) {
+      deepEqual(queryParams, expectedQueryParams, "The query params are correct in the setupController hook");
+    },
 
-//   handleURL("/camelot");
+    renderTemplate: function (controller, context, queryParams) {
+      deepEqual(queryParams, expectedQueryParams, "The query params are correct in the renderTemplates hook");
+    },
 
-//   equal(currentPath, 'camelot');
-//   equal(Ember.$('h3:contains(silly)', '#qunit-fixture').length, 1, "The camelot template was rendered");
+    serialize: function (obj) {
+      return {menu_item_id: obj.id};
+    }
+  });
 
-//   handleURL("/");
+  App.OtherRoute = Ember.Route.extend({
+    beforeModel: function (transition, queryParams) {
+      deepEqual(queryParams, expectedOtherQueryParams, "The query params are correct in the beforeModel hook");
+    },
 
-//   equal(currentPath, 'home');
-//   equal(Ember.$('h3:contains(Hours)', '#qunit-fixture').length, 1, "The home template was rendered");
-// });
+    model: function(params, transition, queryParams) {
+      deepEqual(queryParams, expectedOtherQueryParams, "The query params are correct in the model hook");
+      return {id: params.menu_item_id};
+    },
 
-// test("The Homepage register as activeView", function() {
-//   Router.map(function() {
-//     this.route("home", { path: "/" });
-//     this.route("homepage");
-//   });
+    afterModel: function (resolvedModel, transition, queryParams) {
+      deepEqual(queryParams, expectedOtherQueryParams, "The query params are correct in the beforeModel hook");
+    },
 
-//   App.HomeRoute = Ember.Route.extend({
-//   });
+    setupController: function (controller, context, queryParams) {
+      deepEqual(queryParams, expectedOtherQueryParams, "The query params are correct in the setupController hook");
+    },
 
-//   App.HomepageRoute = Ember.Route.extend({
-//   });
+    renderTemplate: function (controller, context, queryParams) {
+      deepEqual(queryParams, expectedOtherQueryParams, "The query params are correct in the renderTemplates hook");
+    },
 
-//   bootApplication();
+    serialize: function (obj) {
+      return {menu_item_id: obj.id};
+    }
+  });
 
-//   handleURL('/');
 
-//   ok(router._lookupActiveView('home'), '`home` active view is connected');
 
-//   handleURL('/homepage');
+  Ember.TEMPLATES.home = Ember.Handlebars.compile(
+    "<h3>Home</h3>"
+  );
 
-//   ok(router._lookupActiveView('homepage'), '`homepage` active view is connected');
-//   equal(router._lookupActiveView('home'), undefined, '`home` active view is disconnected');
-// });
 
-// test("The Homepage with explicit template name in renderTemplate", function() {
-//   Router.map(function() {
-//     this.route("home", { path: "/" });
-//   });
+  Ember.TEMPLATES.special = Ember.Handlebars.compile(
+    "<p>{{content.id}}</p>"
+  );
 
-//   App.HomeRoute = Ember.Route.extend({
-//     renderTemplate: function() {
-//       this.render('homepage');
-//     }
-//   });
+  bootApplication();
 
-//   bootApplication();
+  var transition = handleURL('/');
 
-//   handleURL('/');
+  Ember.run(function() {
+    transition.then(function() {
+      equal(Ember.$('h3', '#qunit-fixture').text(), "Home", "The app is now in the initial state");
 
-//   equal(Ember.$('h3:contains(Megatroll)', '#qunit-fixture').length, 1, "The homepage template was rendered");
-// });
+      expectedQueryParams = {};
 
-// test("An alternate template will pull in an alternate controller", function() {
-//   Router.map(function() {
-//     this.route("home", { path: "/" });
-//   });
+      return router.transitionTo('special', {id: 1});
+    }, shouldNotHappen).then(function(result) {
+      deepEqual(router.location.path, '/specials/1', "Correct URL after transitioning");
 
-//   App.HomeRoute = Ember.Route.extend({
-//     renderTemplate: function() {
-//       this.render('homepage');
-//     }
-//   });
+      expectedQueryParams = {view: 'details'};
+      return router.transitionTo('special', {queryParams: {view: 'details'}});
+    }, shouldNotHappen).then(function (result) {
+      deepEqual(router.location.path, '/specials/1?view=details', "Correct URL after transitioning with route name and query params");
 
-//   App.HomepageController = Ember.Controller.extend({
-//     home: "Comes from homepage"
-//   });
+      expectedOtherQueryParams = {view: 'details'};
 
-//   bootApplication();
+      return router.transitionTo('other', {id: 2});
+    }, shouldNotHappen).then(function (result) {
+      deepEqual(router.location.path, '/others/2?view=details', "Correct URL after transitioning to other route");
 
-//   handleURL('/');
+      expectedOtherQueryParams = {view: 'details', lang: 'en'};
+      return router.transitionTo({queryParams: {lang: 'en'}});
+    }, shouldNotHappen).then(function (result) {
+      deepEqual(router.location.path, '/others/2?view=details&lang=en', "Correct URL after transitioning to other route");
 
-//   equal(Ember.$('h3:contains(Megatroll) + p:contains(Comes from homepage)', '#qunit-fixture').length, 1, "The homepage template was rendered");
-// });
+      expectedQueryParams = {view: 'details'};
 
-// test("The template will pull in an alternate controller via key/value", function() {
-//   Router.map(function() {
-//     this.route("homepage", { path: "/" });
-//   });
+      return router.transitionTo("special", {id: 2});
+    }, shouldNotHappen).then(function (result) {
+      deepEqual(router.location.path, '/specials/2?view=details', "Correct URL after back to special route");
 
-//   App.HomepageRoute = Ember.Route.extend({
-//     renderTemplate: function() {
-//       this.render({controller: 'home'});
-//     }
-//   });
+      start();
+    }, shouldNotHappen);
+  });
+});
 
-//   App.HomeController = Ember.Controller.extend({
-//     home: "Comes from home."
-//   });
 
-//   bootApplication();
 
-//   handleURL('/');
-
-//   equal(Ember.$('h3:contains(Megatroll) + p:contains(Comes from home.)', '#qunit-fixture').length, 1, "The homepage template was rendered from data from the HomeController");
-// });
-
-// test("The Homepage with explicit template name in renderTemplate and controller", function() {
-//   Router.map(function() {
-//     this.route("home", { path: "/" });
-//   });
-
-//   App.HomeController = Ember.Controller.extend({
-//     home: "YES I AM HOME"
-//   });
-
-//   App.HomeRoute = Ember.Route.extend({
-//     renderTemplate: function() {
-//       this.render('homepage');
-//     }
-//   });
-
-//   bootApplication();
-
-//   handleURL('/');
-
-//   equal(Ember.$('h3:contains(Megatroll) + p:contains(YES I AM HOME)', '#qunit-fixture').length, 1, "The homepage template was rendered");
-// });
-
-// test("Renders correct view with slash notation", function() {
-//   Ember.TEMPLATES['home/page'] = compile("<p>{{view.name}}</p>");
-
-//   Router.map(function() {
-//     this.route("home", { path: "/" });
-//   });
-
-//   App.HomeRoute = Ember.Route.extend({
-//     renderTemplate: function() {
-//       this.render('home/page');
-//     }
-//   });
-
-//   App.HomePageView = Ember.View.extend({
-//     name: "Home/Page"
-//   });
-
-//   bootApplication();
-
-//   handleURL('/');
-
-//   equal(Ember.$('p:contains(Home/Page)', '#qunit-fixture').length, 1, "The homepage template was rendered");
-// });
-
-// test('render does not replace templateName if user provided', function() {
-//   Router.map(function() {
-//     this.route("home", { path: "/" });
-//   });
-
-//   Ember.TEMPLATES.the_real_home_template = Ember.Handlebars.compile(
-//     "<p>THIS IS THE REAL HOME</p>"
-//   );
-
-//   App.HomeView = Ember.View.extend({
-//     templateName: 'the_real_home_template'
-//   });
-//   App.HomeController = Ember.Controller.extend();
-//   App.HomeRoute = Ember.Route.extend();
-
-//   bootApplication();
-
-//   handleURL('/');
-
-//   equal(Ember.$('p', '#qunit-fixture').text(), "THIS IS THE REAL HOME", "The homepage template was rendered");
-// });
-
-// test("The Homepage with a `setupController` hook", function() {
-//   Router.map(function() {
-//     this.route("home", { path: "/" });
-//   });
-
-//   App.HomeRoute = Ember.Route.extend({
-//     setupController: function(controller) {
-//       set(controller, 'hours', Ember.A([
-//         "Monday through Friday: 9am to 5pm",
-//         "Saturday: Noon to Midnight",
-//         "Sunday: Noon to 6pm"
-//       ]));
-//     }
-//   });
-
-//   Ember.TEMPLATES.home = Ember.Handlebars.compile(
-//     "<ul>{{#each entry in hours}}<li>{{entry}}</li>{{/each}}</ul>"
-//   );
-
-//   bootApplication();
-
-//   container.register('controller:home', Ember.Controller.extend());
-
-//   handleURL('/');
-
-//   equal(Ember.$('ul li', '#qunit-fixture').eq(2).text(), "Sunday: Noon to 6pm", "The template was rendered with the hours context");
-// });
-
-// test("The route controller is still set when overriding the setupController hook", function() {
-//   Router.map(function() {
-//     this.route("home", { path: "/" });
-//   });
-
-//   App.HomeRoute = Ember.Route.extend({
-//     setupController: function(controller) {
-//       // no-op
-//       // importantly, we are not calling  this._super here
-//     }
-//   });
-
-//   container.register('controller:home', Ember.Controller.extend());
-
-//   bootApplication();
-
-//   deepEqual(container.lookup('route:home').controller, container.lookup('controller:home'), "route controller is the home controller");
-// });
-
-// test("The route controller can be specified via controllerName", function() {
-//   Router.map(function() {
-//     this.route("home", { path: "/" });
-//   });
-
-//   App.HomeRoute = Ember.Route.extend({
-//     controllerName: 'myController'
-//   });
-
-//   container.register('controller:myController', Ember.Controller.extend());
-
-//   bootApplication();
-
-//   deepEqual(container.lookup('route:home').controller, container.lookup('controller:myController'), "route controller is set by controllerName");
-// });
-
-// test("The Homepage with a `setupController` hook modifying other controllers", function() {
-//   Router.map(function() {
-//     this.route("home", { path: "/" });
-//   });
-
-//   App.HomeRoute = Ember.Route.extend({
-//     setupController: function(controller) {
-//       set(this.controllerFor('home'), 'hours', Ember.A([
-//         "Monday through Friday: 9am to 5pm",
-//         "Saturday: Noon to Midnight",
-//         "Sunday: Noon to 6pm"
-//       ]));
-//     }
-//   });
-
-//   Ember.TEMPLATES.home = Ember.Handlebars.compile(
-//     "<ul>{{#each entry in hours}}<li>{{entry}}</li>{{/each}}</ul>"
-//   );
-
-//   bootApplication();
-
-//   container.register('controller:home', Ember.Controller.extend());
-
-//   handleURL('/');
-
-//   equal(Ember.$('ul li', '#qunit-fixture').eq(2).text(), "Sunday: Noon to 6pm", "The template was rendered with the hours context");
-// });
-
-// test("The Homepage with a computed context that does not get overridden", function() {
-//   Router.map(function() {
-//     this.route("home", { path: "/" });
-//   });
-
-//   App.HomeController = Ember.ArrayController.extend({
-//     content: Ember.computed(function() {
-//       return Ember.A([
-//         "Monday through Friday: 9am to 5pm",
-//         "Saturday: Noon to Midnight",
-//         "Sunday: Noon to 6pm"
-//       ]);
-//     })
-//   });
-
-//   Ember.TEMPLATES.home = Ember.Handlebars.compile(
-//     "<ul>{{#each}}<li>{{this}}</li>{{/each}}</ul>"
-//   );
-
-//   bootApplication();
-
-//   handleURL('/');
-
-//   equal(Ember.$('ul li', '#qunit-fixture').eq(2).text(), "Sunday: Noon to 6pm", "The template was rendered with the context intact");
-// });
-
-// test("The Homepage getting its controller context via model", function() {
-//   Router.map(function() {
-//     this.route("home", { path: "/" });
-//   });
-
-//   App.HomeRoute = Ember.Route.extend({
-//     model: function() {
-//       return Ember.A([
-//         "Monday through Friday: 9am to 5pm",
-//         "Saturday: Noon to Midnight",
-//         "Sunday: Noon to 6pm"
-//       ]);
-//     },
-
-//     setupController: function(controller, model) {
-//       equal(this.controllerFor('home'), controller);
-
-//       set(this.controllerFor('home'), 'hours', model);
-//     }
-//   });
-
-//   Ember.TEMPLATES.home = Ember.Handlebars.compile(
-//     "<ul>{{#each entry in hours}}<li>{{entry}}</li>{{/each}}</ul>"
-//   );
-
-//   bootApplication();
-
-//   container.register('controller:home', Ember.Controller.extend());
-
-//   handleURL('/');
-
-//   equal(Ember.$('ul li', '#qunit-fixture').eq(2).text(), "Sunday: Noon to 6pm", "The template was rendered with the hours context");
-// });
-
-// test("The Specials Page getting its controller context by deserializing the params hash", function() {
-//   Router.map(function() {
-//     this.route("home", { path: "/" });
-//     this.resource("special", { path: "/specials/:menu_item_id" });
-//   });
-
-//   App.SpecialRoute = Ember.Route.extend({
-//     model: function(params) {
-//       return Ember.Object.create({
-//         menuItemId: params.menu_item_id
-//       });
-//     },
-
-//     setupController: function(controller, model) {
-//       set(controller, 'content', model);
-//     }
-//   });
-
-//   Ember.TEMPLATES.special = Ember.Handlebars.compile(
-//     "<p>{{content.menuItemId}}</p>"
-//   );
-
-//   bootApplication();
-
-//   container.register('controller:special', Ember.Controller.extend());
-
-//   handleURL("/specials/1");
-
-//   equal(Ember.$('p', '#qunit-fixture').text(), "1", "The model was used to render the template");
-// });
-
-// test("The Specials Page defaults to looking models up via `find`", function() {
-//   Router.map(function() {
-//     this.route("home", { path: "/" });
-//     this.resource("special", { path: "/specials/:menu_item_id" });
-//   });
-
-//   App.MenuItem = Ember.Object.extend();
-//   App.MenuItem.reopenClass({
-//     find: function(id) {
-//       return App.MenuItem.create({
-//         id: id
-//       });
-//     }
-//   });
-
-//   App.SpecialRoute = Ember.Route.extend({
-//     setupController: function(controller, model) {
-//       set(controller, 'content', model);
-//     }
-//   });
-
-//   Ember.TEMPLATES.special = Ember.Handlebars.compile(
-//     "<p>{{content.id}}</p>"
-//   );
-
-//   bootApplication();
-
-//   container.register('controller:special', Ember.Controller.extend());
-
-//   handleURL("/specials/1");
-
-//   equal(Ember.$('p', '#qunit-fixture').text(), "1", "The model was used to render the template");
-// });
-
-// test("The Special Page returning a promise puts the app into a loading state until the promise is resolved", function() {
-//   Router.map(function() {
-//     this.route("home", { path: "/" });
-//     this.resource("special", { path: "/specials/:menu_item_id" });
-//   });
-
-//   var menuItem;
-
-//   App.MenuItem = Ember.Object.extend(Ember.DeferredMixin);
-//   App.MenuItem.reopenClass({
-//     find: function(id) {
-//       menuItem = App.MenuItem.create({
-//         id: id
-//       });
-
-//       return menuItem;
-//     }
-//   });
-
-//   App.LoadingRoute = Ember.Route.extend({
-
-//   });
-
-//   App.SpecialRoute = Ember.Route.extend({
-//     setupController: function(controller, model) {
-//       set(controller, 'content', model);
-//     }
-//   });
-
-//   Ember.TEMPLATES.special = Ember.Handlebars.compile(
-//     "<p>{{content.id}}</p>"
-//   );
-
-//   Ember.TEMPLATES.loading = Ember.Handlebars.compile(
-//     "<p>LOADING!</p>"
-//   );
-
-//   bootApplication();
-
-//   container.register('controller:special', Ember.Controller.extend());
-
-//   handleURL("/specials/1");
-
-//   equal(Ember.$('p', '#qunit-fixture').text(), "LOADING!", "The app is in the loading state");
-
-//   Ember.run(function() {
-//     menuItem.resolve(menuItem);
-//   });
-
-//   equal(Ember.$('p', '#qunit-fixture').text(), "1", "The app is now in the specials state");
-// });
-
-// test("The loading state doesn't get entered for promises that resolve on the same run loop", function() {
-//   Router.map(function() {
-//     this.route("home", { path: "/" });
-//     this.resource("special", { path: "/specials/:menu_item_id" });
-//   });
-
-//   App.MenuItem = Ember.Object.extend();
-//   App.MenuItem.reopenClass({
-//     find: function(id) {
-//       return { id: id };
-//     }
-//   });
-
-//   App.LoadingRoute = Ember.Route.extend({
-//     enter: function() {
-//       ok(false, "LoadingRoute shouldn't have been entered.");
-//     }
-//   });
-
-//   App.SpecialRoute = Ember.Route.extend({
-//     setupController: function(controller, model) {
-//       set(controller, 'content', model);
-//     }
-//   });
-
-//   Ember.TEMPLATES.special = Ember.Handlebars.compile(
-//     "<p>{{content.id}}</p>"
-//   );
-
-//   Ember.TEMPLATES.loading = Ember.Handlebars.compile(
-//     "<p>LOADING!</p>"
-//   );
-
-//   bootApplication();
-
-//   container.register('controller:special', Ember.Controller.extend());
-
-//   handleURL("/specials/1");
-
-//   equal(Ember.$('p', '#qunit-fixture').text(), "1", "The app is now in the specials state");
-// });
-
-// asyncTest("The Special page returning an error fires the error hook on SpecialRoute", function() {
-//   Router.map(function() {
-//     this.route("home", { path: "/" });
-//     this.resource("special", { path: "/specials/:menu_item_id" });
-//   });
-
-//   var menuItem;
-
-//   App.MenuItem = Ember.Object.extend(Ember.DeferredMixin);
-//   App.MenuItem.reopenClass({
-//     find: function(id) {
-//       menuItem = App.MenuItem.create({ id: id });
-//       Ember.run.later(function() { menuItem.resolve(menuItem); }, 1);
-//       return menuItem;
-//     }
-//   });
-
-//   App.SpecialRoute = Ember.Route.extend({
-//     setup: function() {
-//       throw 'Setup error';
-//     },
-//     events: {
-//       error: function(reason) {
-//         equal(reason, 'Setup error');
-//         start();
-//       }
-//     }
-//   });
-
-//   bootApplication();
-
-//   handleURLRejectsWith('/specials/1', 'Setup error');
-// });
-
-// asyncTest("The Special page returning an error invokes SpecialRoute's error handler", function() {
-//   Router.map(function() {
-//     this.route("home", { path: "/" });
-//     this.resource("special", { path: "/specials/:menu_item_id" });
-//   });
-
-//   var menuItem;
-
-//   App.MenuItem = Ember.Object.extend(Ember.DeferredMixin);
-//   App.MenuItem.reopenClass({
-//     find: function(id) {
-//       menuItem = App.MenuItem.create({ id: id });
-//       Ember.run.later(function() {
-//         menuItem.resolve(menuItem);
-//       }, 1);
-//       return menuItem;
-//     }
-//   });
-
-//   App.SpecialRoute = Ember.Route.extend({
-//     setup: function() {
-//       throw 'Setup error';
-//     },
-//     events: {
-//       error: function(reason) {
-//         equal(reason, 'Setup error', 'SpecialRoute#error received the error thrown from setup');
-//         start();
-//       }
-//     }
-//   });
-
-//   bootApplication();
-
-//   handleURLRejectsWith('/specials/1', 'Setup error');
-// });
-
-// asyncTest("ApplicationRoute's default error handler can be overridden", function() {
-//   Router.map(function() {
-//     this.route("home", { path: "/" });
-//     this.resource("special", { path: "/specials/:menu_item_id" });
-//   });
-
-//   var menuItem;
-
-//   App.MenuItem = Ember.Object.extend(Ember.DeferredMixin);
-//   App.MenuItem.reopenClass({
-//     find: function(id) {
-//       menuItem = App.MenuItem.create({ id: id });
-//       Ember.run.later(function() {
-//         menuItem.resolve(menuItem);
-//       }, 1);
-//       return menuItem;
-//     }
-//   });
-
-//   App.ApplicationRoute = Ember.Route.extend({
-//     events: {
-//       error: function(reason) {
-//         equal(reason, 'Setup error', "error was correctly passed to custom ApplicationRoute handler");
-//         start();
-//       }
-//     }
-//   });
-
-//   App.SpecialRoute = Ember.Route.extend({
-//     setup: function() {
-//       throw 'Setup error';
-//     }
-//   });
-
-//   bootApplication();
-
-//   handleURLRejectsWith("/specials/1", "Setup error");
-// });
-
-// asyncTest("Moving from one page to another triggers the correct callbacks", function() {
+// asyncTest("Transitioning query params works on the same route", function() {
 //   expect(3);
 
 //   Router.map(function() {

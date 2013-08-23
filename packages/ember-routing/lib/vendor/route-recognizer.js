@@ -258,12 +258,13 @@ define("route-recognizer",
       for (var i=0, l=handlers.length; i<l; i++) {
         var handler = handlers[i], names = handler.names, params = {},
           watchedQueryParams = handler.queryParams || [],
-          activeQueryParams = {};
+          activeQueryParams = {},
+          j, m;
 
-        for (var j=0, m=names.length; j<m; j++) {
+        for (j=0, m=names.length; j<m; j++) {
           params[names[j]] = captures[currentCapture++];
         }
-        for (var j=0, m=watchedQueryParams.length; j < m; j++) {
+        for (j=0, m=watchedQueryParams.length; j < m; j++) {
           var key = watchedQueryParams[j];
           if(queryParams[key]){
             activeQueryParams[key] = queryParams[key];
@@ -413,7 +414,7 @@ define("route-recognizer",
           }
         }
 
-        if (pairs.length == 0) { return ''; }
+        if (pairs.length === 0) { return ''; }
 
         return "?" + pairs.join("&");
       },
@@ -498,7 +499,7 @@ define("route-recognizer",
         if (arguments.length === 0) { throw new Error("you must provide arguments to the withQueryParams method"); }
         for (var i = 0; i < arguments.length; i++) {
           if (typeof arguments[i] !== "string") {
-            throw new Error('you should call withQueryParams with a list of strings, e.g. withQueryParams("foo", "bar")')
+            throw new Error('you should call withQueryParams with a list of strings, e.g. withQueryParams("foo", "bar")');
           }
         }
         var queryParams = [].slice.call(arguments);
