@@ -285,6 +285,17 @@ define("router",
       },
 
       /**
+        This method takes a handler name and returns a list of query params
+        that are valid to pass to the handler or its parents
+
+        @param {String} handlerName
+        @return {Array[String]} a list of query parameters
+      */
+      queryParamsForHandler: function (handlerName) {
+        return queryParamsForHandler(this, handlerName);
+      },
+
+      /**
         Take a named route and context objects and generate a
         URL.
 
@@ -325,7 +336,11 @@ define("router",
       },
 
       isActive: function(handlerName) {
-        var contexts = slice.call(arguments, 1);
+        var partitionedArgs   = extractQueryParams(slice.call(arguments, 1)),
+            contexts          = partitionedArgs[0],
+            queryParams       = partitionedArgs[1],
+            activeQueryParams  = {},
+            effectiveQueryParams = {};
 
         var targetHandlerInfos = this.targetHandlerInfos,
             found = false, names, object, handlerInfo, handlerObj;
@@ -333,19 +348,22 @@ define("router",
         if (!targetHandlerInfos) { return false; }
 
         var recogHandlers = this.recognizer.handlersFor(targetHandlerInfos[targetHandlerInfos.length - 1].name);
-
         for (var i=targetHandlerInfos.length-1; i>=0; i--) {
           handlerInfo = targetHandlerInfos[i];
           if (handlerInfo.name === handlerName) { found = true; }
 
           if (found) {
-            if (contexts.length === 0) { break; }
+            var recogHandler = recogHandlers[i];
 
-            if (handlerInfo.isDynamic) {
+            merge(activeQueryParams, handlerInfo.queryParams);
+            merge(effectiveQueryParams, handlerInfo.queryParams);
+            mergeSomeKeys(effectiveQueryParams, queryParams, recogHandler.queryParams);
+
+            if (handlerInfo.isDynamic && contexts.length > 0) {
               object = contexts.pop();
 
               if (isParam(object)) {
-                var recogHandler = recogHandlers[i], name = recogHandler.names[0];
+                var name = recogHandler.names[0];
                 if (object.toString() !== this.currentParams[name]) { return false; }
               } else if (handlerInfo.context !== object) {
                 return false;
@@ -354,7 +372,7 @@ define("router",
           }
         }
 
-        return contexts.length === 0 && found;
+        return contexts.length === 0 && found && queryParamsEqual(activeQueryParams, effectiveQueryParams);
       },
 
       trigger: function(name) {
@@ -903,7 +921,7 @@ define("router",
     function extractQueryParams(array) {
       var len = (array && array.length), head, queryParams;
 
-      if(len && len > 0 && (queryParams = array[len - 1].queryParams)) {
+      if(len && len > 0 && array[len - 1] && (queryParams = array[len - 1].queryParams)) {
         head = slice.call(array, 0, len - 1);
         return [head, queryParams];
       } else {

@@ -165,6 +165,16 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
       for(i=0; i < length; i++) {
         this.registerObserver(this, paths[i], this, observer);
       }
+
+      var queryObserver = function (object, path) {
+        this.notifyPropertyChange('queryParams');
+      };
+
+      var queryParams = get(this, '_potentialQueryParams') || [];
+
+      for(i=0; i < queryParams.length; i++) {
+        this.registerObserver(this, queryParams[i], this, queryObserver);
+      }
     },
 
     /**
@@ -208,8 +218,20 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
           params = resolvedPaths(this.parameters),
           currentWhen = this.currentWhen || get(this, 'namedRoute'),
           currentWithIndex = currentWhen + '.index',
-          isActive = router.isActive.apply(router, [currentWhen].concat(params)) ||
-                     router.isActive.apply(router, [currentWithIndex].concat(params));
+          queryParams = get(this, 'queryParams');
+
+      var args = [currentWhen].concat(params);
+      if (queryParams) { args.push({queryParams: queryParams}); }
+
+      var isActive = router.isActive.apply(router, args);
+
+      if (!isActive) {
+        args = [currentWithIndex].concat(params);
+        if (queryParams) { args.push({queryParams: queryParams}); }
+
+        isActive = router.isActive.apply(router, args);
+      }
+
 
       if (isActive) { return get(this, 'activeClass'); }
     }).property('namedRoute', 'router.url'),
@@ -285,9 +307,41 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
         // If contexts aren't present, consider the linkView unloaded.
         if (context === null || typeof context === 'undefined') { return; }
       }
+      var args = [ namedRoute ].concat(resolvedContexts),
+        queryParams = get(this, 'queryParams');
 
-      return [ namedRoute ].concat(resolvedContexts);
+      if (queryParams) { args.push({queryParams: queryParams}); }
+
+      return args;
+    }).property('namedRoute', 'queryParams'),
+
+    _potentialQueryParams: Ember.computed(function () {
+      var namedRoute = get(this, 'namedRoute');
+      if (!namedRoute) { return null; }
+      var router          = get(this, 'router');
+
+      namedRoute = fullRouteName(router, namedRoute);
+
+      return router.router.queryParamsForHandler(namedRoute);
+
     }).property('namedRoute'),
+
+    queryParams: Ember.computed(function () {
+      var self              = this,
+        queryParams         = null,
+        allowedQueryParams  = get(this, '_potentialQueryParams');
+
+      if (!allowedQueryParams) { return null; }
+      allowedQueryParams.forEach(function (param) {
+        var value = get(self, param);
+        if (typeof value !== 'undefined') {
+          queryParams = queryParams || {};
+          queryParams[param] = value;
+        }
+      });
+
+      return queryParams;
+    }).property('_potentialQueryParams.[]'),
 
     /**
       Sets the element's `href` attribute to the url for
