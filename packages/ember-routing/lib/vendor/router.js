@@ -135,6 +135,10 @@ define("router",
       method: function(method) {
         this.urlMethod = method;
         return this;
+      },
+
+      toString: function() {
+        return "Transition (sequence " + this.sequence + ")";
       }
     };
 
@@ -1185,7 +1189,14 @@ define("router",
 
         log(router, seq, handlerName + ": calling beforeModel hook");
 
-        var p = handler.beforeModel && handler.beforeModel(transition, handlerInfo.queryParams);
+        var args;
+        if (router.newHookParamOrder) {
+          args = [handlerInfo.queryParams, transition];
+        } else {
+          args = [transition, handlerInfo.queryParams];
+        }
+
+        var p = handler.beforeModel && handler.beforeModel.apply(handler, args);
         return (p instanceof Transition) ? null : p;
       }
 
@@ -1205,7 +1216,14 @@ define("router",
 
         transition.resolvedModels[handlerInfo.name] = context;
 
-        var p = handler.afterModel && handler.afterModel(context, transition, handlerInfo.queryParams);
+        var args;
+        if (router.newHookParamOrder) {
+          args = [context, handlerInfo.queryParams, transition];
+        } else {
+          args = [context, transition, handlerInfo.queryParams];
+        }
+
+        var p = handler.afterModel && handler.afterModel.apply(handler, args);
         return (p instanceof Transition) ? null : p;
       }
 
@@ -1237,7 +1255,7 @@ define("router",
      */
     function getModel(handlerInfo, transition, handlerParams, needsUpdate) {
       var handler = handlerInfo.handler,
-          handlerName = handlerInfo.name;
+          handlerName = handlerInfo.name, args;
 
       if (!needsUpdate && handler.hasOwnProperty('context')) {
         return handler.context;
@@ -1247,7 +1265,14 @@ define("router",
         var providedModel = transition.providedModels[handlerName];
         return typeof providedModel === 'function' ? providedModel() : providedModel;
       }
-      return handler.model && handler.model(handlerParams || {}, transition, handlerInfo.queryParams);
+
+      if (transition.router.newHookParamOrder) {
+        args = [handlerParams || {}, handlerInfo.queryParams, transition];
+      } else {
+        args = [handlerParams || {}, transition, handlerInfo.queryParams];
+      }
+
+      return handler.model && handler.model.apply(handler, args);
     }
 
     /**

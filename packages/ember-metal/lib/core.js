@@ -128,6 +128,38 @@ Ember.SHIM_ES5 = (Ember.ENV.SHIM_ES5 === false) ? false : Ember.EXTEND_PROTOTYPE
 */
 Ember.LOG_VERSION = (Ember.ENV.LOG_VERSION === false) ? false : true;
 
+
+/**
+  Determines if the model hooks use the old parameter order, or the new order
+  with query params.
+
+  Old order:
+
+  ```javascript
+  App.IndexRoute = Ember.Route.extend({
+      beforeModel:  function( transition, queryParams ) {},
+      model:        function( params, transition, queryParams ) {},
+      afterModel:   function( resolvedModel, transition, queryParams ) {}
+  });
+  ```
+
+  New order:
+
+  ```javascript
+  App.IndexRoute = Ember.Route.extend({
+      beforeModel:  function( queryParams, transition ) {},
+      model:        function( params, queryParams, transition ) {},
+      afterModel:   function( resolvedModel, queryParams, transition ) {}
+  });
+  ```
+
+  @property NEW_MODEL_HOOKS_PARAM_ORDER
+  @type Boolean
+  @default false
+*/
+Ember.NEW_MODEL_HOOKS_PARAM_ORDER = (Ember.ENV.NEW_MODEL_HOOKS_PARAM_ORDER === true) ? true : false;
+
+
 /**
   Empty function. Useful for some operations.
 

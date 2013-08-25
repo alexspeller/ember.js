@@ -247,6 +247,12 @@ var Application = Ember.Application = Ember.Namespace.extend(Ember.DeferredMixin
       Ember.debug('jQuery.VERSION : ' + Ember.$().jquery);
       Ember.debug('-------------------------------');
     }
+
+    this.NEW_MODEL_HOOKS_PARAM_ORDER = Ember.NEW_MODEL_HOOKS_PARAM_ORDER;
+
+    if(!this.NEW_MODEL_HOOKS_PARAM_ORDER) {
+      Ember.warn("The parameter order for beforeModel, model and afterModel hooks will be changing due to the introduction of query params. Please see http://emberjs.com/api/#property_NEW_MODEL_HOOKS_PARAM_ORDER and set ENV.NEW_MODEL_HOOKS_PARAM_ORDER to true once you have updated your hooks.");
+    }
   },
 
   /**

@@ -121,6 +121,60 @@ test("The Homepage with Query Params", function() {
   bootApplication("/?foo=bar&baz");
 });
 
+test("The Homepage with Query Params using new param order", function() {
+  expect(14);
+  var context = {id: 1},
+    expectedParams = {param: 'someParam'},
+    expectedQueryParams = {foo: 'bar', baz: true};
+
+
+  App.NEW_MODEL_HOOKS_PARAM_ORDER = true;
+
+  Router.map(function() {
+    this.route("index", { path: "/:param", queryParams: ['foo', 'baz'] });
+  });
+
+  function shouldBeTransition(object) {
+    ok(/Transition \(sequence \d+\)/.test(object.toString()), "Object should be transition");
+  }
+
+  App.IndexRoute = Ember.Route.extend({
+    beforeModel: function(queryParams, transition) {
+      deepEqual(queryParams, expectedQueryParams, "beforeModel hook is called with query params");
+      shouldBeTransition(transition);
+    },
+
+    model: function(params, queryParams, transition) {
+      deepEqual(params, expectedParams, "Model hook is called with correct params");
+      deepEqual(queryParams, expectedQueryParams, "Model hook is called with query params");
+      shouldBeTransition(transition);
+      return context;
+    },
+
+    afterModel: function(resolvedModel, queryParams, transition) {
+      strictEqual(resolvedModel, context, "afterModel has correct context");
+      deepEqual(queryParams, expectedQueryParams, "afterModel hook is called with query params");
+      shouldBeTransition(transition);
+    },
+
+    setupController: function (controller, sContext, queryParams) {
+      ok(controller instanceof App.IndexController, "controller is IndexController");
+      strictEqual(sContext, context);
+      deepEqual(queryParams,  expectedQueryParams, "setupController hook is called with query params");
+    },
+
+    renderTemplate: function (controller, rContext, queryParams) {
+      ok(controller instanceof App.IndexController, "controller is IndexController");
+      strictEqual(rContext, context);
+      deepEqual(queryParams, expectedQueryParams, "renderTemplates hook is called with query params");
+    }
+
+  });
+
+  App.IndexController = Ember.Controller.extend();
+
+  bootApplication("/someParam?foo=bar&baz");
+});
 
 
 asyncTest("Transitioning query params works on the same route", function() {

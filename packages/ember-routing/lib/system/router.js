@@ -294,6 +294,10 @@ Ember.Router.reopenClass({
       router.log = Ember.Logger.debug;
     }
 
+    if (get(this, 'namespace.NEW_MODEL_HOOKS_PARAM_ORDER')) {
+      router.newHookParamOrder = true;
+    }
+
     var dsl = Ember.RouterDSL.map(function() {
       this.resource('application', { path: "/" }, function() {
         for (var i=0; i < router.callbacks.length; i++) {
