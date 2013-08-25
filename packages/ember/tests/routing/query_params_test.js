@@ -1,7 +1,9 @@
 var Router, App, AppView, templates, router, container, originalTemplates;
 var get = Ember.get, set = Ember.set;
 
-function bootApplication() {
+function bootApplication(url) {
+  router = container.lookup('router:main');
+  if(url) { router.location.setURL(url); }
   Ember.run(App, 'advanceReadiness');
 }
 
@@ -73,7 +75,6 @@ module("Routing with Query Params", {
       Ember.TEMPLATES.homepage = compile("<h3>Megatroll</h3><p>{{home}}</p>");
       Ember.TEMPLATES.camelot = compile('<section><h3>Is a silly place</h3></section>');
     });
-    router = container.lookup('router:main');
   },
 
   teardown: function() {
@@ -117,8 +118,7 @@ test("The Homepage with Query Params", function() {
   });
 
 
-  router.location.setURL("/?foo=bar&baz");
-  bootApplication();
+  bootApplication("/?foo=bar&baz");
 });
 
 
