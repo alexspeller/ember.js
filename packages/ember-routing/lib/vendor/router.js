@@ -279,6 +279,7 @@ define("router",
         @param {Array[Object]} contexts
         @return {Object} a serialized parameter hash
       */
+
       paramsForHandler: function(handlerName, contexts) {
         var partitionedArgs = extractQueryParams(slice.call(arguments, 1));
         return paramsForHandler(this, handlerName, partitionedArgs[0], partitionedArgs[1]);
@@ -1148,8 +1149,8 @@ define("router",
                            .then(handleAbort)
                            .then(afterModel)
                            .then(handleAbort)
-                           .then(proceed)
-                           .then(null, handleError);
+                           .then(null, handleError)
+                           .then(proceed);
 
       function handleAbort(result) {
         if (transition.isAborted) {
@@ -1175,10 +1176,6 @@ define("router",
         // An error was thrown / promise rejected, so fire an
         // `error` event from this handler info up to root.
         trigger(handlerInfos.slice(0, index + 1), true, ['error', reason, transition]);
-
-        if (handler.error) {
-          handler.error(reason, transition);
-        }
 
         // Propagate the original error.
         return RSVP.reject(reason);
