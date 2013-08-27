@@ -1087,17 +1087,19 @@ define("router",
         }
       }
 
+      var newQueryParams = {};
+      for (i = handlerInfos.length - 1; i>=0; --i) {
+        merge(newQueryParams, handlerInfos[i].queryParams);
+      }
+      router.currentQueryParams = newQueryParams;
+
+
       var params = paramsForHandler(router, handlerName, objects, transition.queryParams);
 
       transition.providedModelsArray = [];
       transition.providedContexts = {};
       router.currentParams = params;
 
-      var newQueryParams = {};
-      for (i = handlerInfos.length - 1; i>=0; --i) {
-        merge(newQueryParams, handlerInfos[i].queryParams);
-      }
-      router.currentQueryParams = newQueryParams;
 
       var urlMethod = transition.urlMethod;
       if (urlMethod) {

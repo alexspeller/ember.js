@@ -234,7 +234,7 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
 
 
       if (isActive) { return get(this, 'activeClass'); }
-    }).property('namedRoute', 'router.url'),
+    }).property('namedRoute', 'queryParams', 'router.url'),
 
     loading: Ember.computed(function() {
       if (!get(this, 'routeArgs')) { return get(this, 'loadingClass'); }
@@ -287,7 +287,6 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
     },
 
     routeArgs: Ember.computed(function() {
-
       var router = get(this, 'router'),
           namedRoute = get(this, 'namedRoute'), routeName;
 
@@ -313,7 +312,7 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
       if (queryParams) { args.push({queryParams: queryParams}); }
 
       return args;
-    }).property('namedRoute', 'queryParams'),
+    }).property('namedRoute', 'queryParams', 'router.url'),
 
     _potentialQueryParams: Ember.computed(function () {
       var namedRoute = get(this, 'namedRoute');
@@ -323,7 +322,6 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
       namedRoute = fullRouteName(router, namedRoute);
 
       return router.router.queryParamsForHandler(namedRoute);
-
     }).property('namedRoute'),
 
     queryParams: Ember.computed(function () {
