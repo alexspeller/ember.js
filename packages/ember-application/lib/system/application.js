@@ -136,9 +136,9 @@ DeprecatedContainer.prototype = {
 
   In addition to creating your application's router, `Ember.Application` is
   also responsible for telling the router when to start routing. Transitions
-  between routes can be logged with the LOG_TRANSITIONS flag, and more
+  between routes can be logged with the `LOG_TRANSITIONS` flag, and more
   detailed intra-transition logging can be logged with
-  the LOG_TRANSITIONS_INTERNAL flag:
+  the `LOG_TRANSITIONS_INTERNAL` flag:
 
   ```javascript
   window.App = Ember.Application.create({
@@ -360,6 +360,10 @@ var Application = Ember.Application = Ember.Namespace.extend(Ember.DeferredMixin
   },
 
   /**
+    Call `advanceReadiness` after any asynchronous setup logic has completed.
+    Each call to `deferReadiness` must be matched by a call to `advanceReadiness`
+    or the application will never become ready and routing will not begin.
+    
     @method advanceReadiness
     @see {Ember.Application#deferReadiness}
   */
@@ -641,7 +645,7 @@ var Application = Ember.Application = Ember.Namespace.extend(Ember.DeferredMixin
 
   /**
 
-    @depercated Use 'Resolver' instead
+    @deprecated Use 'Resolver' instead
     Set this to provide an alternate class to `Ember.DefaultResolver`
 
     @property resolver

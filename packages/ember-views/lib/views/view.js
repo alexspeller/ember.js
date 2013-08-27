@@ -51,7 +51,13 @@ Ember.warn("The VIEW_PRESERVES_CONTEXT flag has been removed and the functionali
 Ember.TEMPLATES = {};
 
 /**
-  `Ember.CoreView` is
+  `Ember.CoreView` is an abstract class that exists to give view-like behavior
+  to both Ember's main view class `Ember.View` and other classes like 
+  `Ember._SimpleMetamorphView` that don't need the fully functionaltiy of
+  `Ember.View`.
+
+  Unless you have specific needs for `CoreView`, you will use `Ember.View`
+  in your applications. 
 
   @class CoreView
   @namespace Ember
@@ -275,7 +281,7 @@ var EMPTY_ARRAY = [];
 
   The default HTML tag name used for a view's DOM representation is `div`. This
   can be customized by setting the `tagName` property. The following view
-class:
+  class:
 
   ```javascript
   ParagraphView = Ember.View.extend({
@@ -449,8 +455,8 @@ class:
   will be removed.
 
   Both `classNames` and `classNameBindings` are concatenated properties. See
-  `Ember.Object` documentation for more information about concatenated
-  properties.
+  [Ember.Object](/api/classes/Ember.Object.html) documentation for more
+  information about concatenated properties.
 
   ## HTML Attributes
 
@@ -510,7 +516,7 @@ class:
   Updates to the the property of an attribute binding will result in automatic
   update of the  HTML attribute in the view's rendered HTML representation.
 
-  `attributeBindings` is a concatenated property. See `Ember.Object`
+  `attributeBindings` is a concatenated property. See [Ember.Object](/api/classes/Ember.Object.html)
   documentation for more information about concatenated properties.
 
   ## Templates
@@ -661,7 +667,8 @@ class:
   </div>
   ```
 
-  See `Handlebars.helpers.yield` for more information.
+  See [Ember.Handlebars.helpers.yield](/api/classes/Ember.Handlebars.helpers.html#method_yield)
+  for more information.
 
   ## Responding to Browser Events
 
@@ -758,7 +765,7 @@ class:
 
   ### Handlebars `{{action}}` Helper
 
-  See `Handlebars.helpers.action`.
+  See [Handlebars.helpers.action](/api/classes/Ember.Handlebars.helpers.html#method_action).
 
   ### Event Names
 
@@ -813,8 +820,8 @@ class:
   ## Handlebars `{{view}}` Helper
 
   Other `Ember.View` instances can be included as part of a view's template by
-  using the `{{view}}` Handlebars helper. See `Handlebars.helpers.view` for
-  additional information.
+  using the `{{view}}` Handlebars helper. See [Ember.Handlebars.helpers.view](/api/classes/Ember.Handlebars.helpers.html#method_view)
+  for additional information.
 
   @class View
   @namespace Ember
@@ -1855,7 +1862,7 @@ Ember.View = Ember.CoreView.extend(
     visually challenged users navigate rich web applications.
 
     The full list of valid WAI-ARIA roles is available at:
-    http://www.w3.org/TR/wai-aria/roles#roles_categorization
+    [http://www.w3.org/TR/wai-aria/roles#roles_categorization](http://www.w3.org/TR/wai-aria/roles#roles_categorization)
 
     @property ariaRole
     @type String
@@ -2082,7 +2089,7 @@ Ember.View = Ember.CoreView.extend(
     act as a child of the parent.
 
     @method createChildView
-    @param {Class} viewClass
+    @param {Class|String} viewClass
     @param {Hash} [attrs] Attributes to add
     @return {Ember.View} new instance
   */
@@ -2093,11 +2100,11 @@ Ember.View = Ember.CoreView.extend(
 
     attrs = attrs || {};
     attrs._parentView = this;
-    attrs.container = this.container;
 
     if (Ember.CoreView.detect(view)) {
       attrs.templateData = attrs.templateData || get(this, 'templateData');
 
+      attrs.container = this.container;
       view = view.create(attrs);
 
       // don't set the property on a virtual view, as they are invisible to
@@ -2105,14 +2112,24 @@ Ember.View = Ember.CoreView.extend(
       if (view.viewName) {
         set(get(this, 'concreteView'), view.viewName, view);
       }
+    } else if ('string' === typeof view) {
+      var fullName = 'view:' + view;
+      var View = this.container.lookupFactory(fullName);
+
+      Ember.assert("Could not find view: '" + fullName + "'", !!View);
+
+      attrs.templateData = get(this, 'templateData');
+      view = View.create(attrs);
     } else {
       Ember.assert('You must pass instance or subclass of View', view.isView);
+      attrs.container = this.container;
+
+      if (!get(view, 'templateData')) {
+        attrs.templateData = get(this, 'templateData');
+      }
 
       Ember.setProperties(view, attrs);
 
-      if (!get(view, 'templateData')) {
-        set(view, 'templateData', get(this, 'templateData'));
-      }
     }
 
     return view;
@@ -2320,7 +2337,7 @@ Ember.View.reopenClass({
 
     Parse a path and return an object which holds the parsed properties.
 
-    For example a path like "content.isEnabled:enabled:disabled" wil return the
+    For example a path like "content.isEnabled:enabled:disabled" will return the
     following object:
 
     ```javascript
